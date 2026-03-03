@@ -1,0 +1,775 @@
+erDiagram
+    %% ══════════════════════════════════════════════════════════════════════════════════
+    %% HRMS ENTITÁS-TÉRKÉP – Összefoglaló ER diagram
+    %% ══════════════════════════════════════════════════════════════════════════════════
+    %% Verzió: 1.0
+    %% Utolsó frissítés: 2026-02-21
+    %%
+    %% Ez a diagram az HRMS rendszer főbb entitásait és kapcsolatait mutatja be.
+    %% Teljes entitáslistát lásd: hrms-entity-overview.md (~150+ entitás, 20 modul)
+    %%
+    %% Modulok (5 főkategória, 20 funkcionális modul):
+    %%   1. CORE: Person, Organization, Position, Employment, Qualification, Document
+    %%   2. COMPENSATION & TIME: Compensation, Payroll, TimeTracking, Leave
+    %%   3. TALENT: Recruitment, Learning, Performance
+    %%   4. EMPLOYMENT LIFECYCLE: Disciplinary, OccupationalHealth, Offboarding
+    %%   5. STRATEGIC & COMPLIANCE: SuccessionPlanning, WorkforcePlanning
+    %%
+    %% Központi hub: Employment (összes operatív folyamat ide kapcsolódik)
+    %% ══════════════════════════════════════════════════════════════════════════════════
+
+    %% ═══════════════════════════════════════════════════════════════════════════════
+    %% 1. CORE – ALAPVETŐ TÖRZSADATOK ÉS SZERVEZET
+    %% ═══════════════════════════════════════════════════════════════════════════════
+
+    %% ─── PERSON (Személy) ───
+    Person {
+        UUID id PK
+        string taxId "Adóazonosító jel"
+        string socialSecurityNumber "TAJ szám"
+        string familyName "Vezetéknév"
+        string givenNames "Utónév(ek)"
+        date birthDate "Születési dátum"
+        string motherBirthName "Anyja születési neve"
+        enum gender "male/female/other/unknown"
+        boolean isActive "Aktív-e"
+        datetime createdAt "Létrehozva"
+    }
+
+    Dependent {
+        UUID id PK
+        UUID personId FK
+        string name "Eltartott neve"
+        date birthDate "Születési dátum"
+        enum relationship "spouse/child/other"
+        boolean disability "Fogyatékos-e"
+        date validFrom "Érvényesség kezdete"
+        date validTo "Érvényesség vége"
+    }
+
+    BankAccount {
+        UUID id PK
+        UUID personId FK
+        string accountNumber "Számlaszám (IBAN)"
+        string bankName "Bank neve"
+        boolean isPrimary "Elsődleges-e"
+        date validFrom "Érvényesség kezdete"
+        date validTo "Érvényesség vége"
+    }
+
+    EmergencyContact {
+        UUID id PK
+        UUID personId FK
+        string name "Kapcsolattartó neve"
+        string phone "Telefonszám"
+        enum relationship "parent/spouse/sibling/friend/other"
+        string address "Cím"
+    }
+
+    %% ─── ORGANIZATION (Szervezet) ───
+    Organization {
+        UUID id PK
+        string name "Szervezet neve"
+        string taxNumber "Adószám"
+        enum sector "private/public/nonprofit/church/other"
+        enum legalForm "limited/plc/cooperative/foundation/budget_institution/stb"
+        enum ownershipType "private/state/municipal/church/mixed"
+        UUID parentOrganizationId FK "Fenntartó vagy anyavállalat"
+        boolean isActive "Aktív-e"
+    }
+
+    OrgUnit {
+        UUID id PK
+        UUID organizationId FK
+        UUID parentOrgUnitId FK "Hierarchia"
+        string code "Szervezeti kód"
+        string name "Szervezeti egység neve"
+        enum orgUnitType "department/division/team/project/cost_center"
+        integer level "Hierarchia szint (számított)"
+        date effectiveFrom "Érvényesség kezdete"
+        date effectiveTo "Érvényesség vége"
+    }
+
+    Site {
+        UUID id PK
+        UUID organizationId FK
+        string name "Telephely neve"
+        enum siteType "headquarters/branch/site/other"
+        string address "Cím"
+        boolean isRegistered "Bejegyzett-e"
+        date effectiveFrom "Érvényesség kezdete"
+    }
+
+    %% ─── POSITION (Munkakör / Álláshely) ───
+    PositionTemplate {
+        UUID id PK
+        UUID organizationId FK
+        string code "Munkakör kódja"
+        string name "Munkakör megnevezése"
+        string feorCode "FEOR-08 kód"
+        enum category "executive/manager/professional/specialist/administrative/support/worker"
+        string applicableEmploymentTypes "mt,kjt,kit,kttv,puetv,eszjtv,kut"
+        boolean isActive "Aktív-e"
+    }
+
+    Position {
+        UUID id PK
+        UUID positionTemplateId FK
+        UUID orgUnitId FK
+        UUID siteId FK
+        UUID reportingToPositionId FK "Felettes pozíció"
+        string positionCode "Pozíció egyedi kódja"
+        string positionTitle "Pozíció megnevezése"
+        decimal headcount "Létszám (FTE)"
+        enum status "planned/vacant/occupied/frozen/abolished"
+        date effectiveFrom "Érvényesség kezdete"
+        date effectiveTo "Érvényesség vége"
+    }
+
+    %% ─── EMPLOYMENT (Jogviszony) – KÖZPONTI HUB ───
+    Employment {
+        UUID id PK
+        UUID personId FK
+        UUID organizationId FK
+        UUID orgUnitId FK
+        UUID positionId FK
+        enum employmentType "mt/kjt/kit/kttv/puetv/eszjtv/kut"
+        date startDate "Jogviszony kezdete"
+        date endDate "Jogviszony vége"
+        enum contractDuration "indefinite/fixed_term"
+        date fixedTermEndDate "Határozott idő vége"
+        date seniorityDate "Jogviszonyban töltött idő kezdete"
+        decimal weeklyHours "Heti óraszám"
+        boolean isFullTime "Teljes munkaidős-e"
+        enum status "draft/active/suspended/terminated"
+        datetime createdAt "Létrehozva"
+    }
+
+    EmploymentHistory {
+        UUID id PK
+        UUID employmentId FK
+        enum fieldGroup "position/compensation/schedule/status/org_unit/other"
+        date validFrom "Érvényesség kezdete"
+        date validTo "Érvényesség vége"
+        json previousValue "Előző érték"
+        json newValue "Új érték"
+        enum changeReason "promotion/transfer/salary_review/disciplinary/other"
+        UUID changedByUserId FK
+        datetime changedAt "Változtatás időpontja"
+    }
+
+    %% ─── QUALIFICATION (Végzettség és képesítés) ───
+    Qualification {
+        UUID id PK
+        UUID personId FK
+        enum qualificationType "school/vocational/higher_education/postgraduate/doctorate/other"
+        enum qualificationLevel "mkkr_1/mkkr_2/.../mkkr_8"
+        string name "Végzettség megnevezése"
+        string institution "Oktatási intézmény"
+        date dateObtained "Megszerzés dátuma"
+        boolean isForeignQualification "Külföldi végzettség-e"
+        enum foreignRecognitionStatus "not_required/pending/partial/full/rejected"
+    }
+
+    LanguageSkill {
+        UUID id PK
+        UUID personId FK
+        string languageCode "ISO 639-1 kód (pl. en, de, fr)"
+        enum proficiencyLevel "basic/intermediate/advanced/native"
+        boolean hasOfficialExam "Van-e hivatalos nyelvvizsga"
+        enum examType "general/professional/complex"
+        enum examLevel "basic/intermediate/advanced"
+        date examDate "Nyelvvizsga dátuma"
+    }
+
+    License {
+        UUID id PK
+        UUID personId FK
+        enum licenseType "mok/meszk/driving/electrical/security/other"
+        string licenseNumber "Engedély száma"
+        date issueDate "Kiállítás dátuma"
+        date expiryDate "Lejárat dátuma"
+        date nextRenewalDue "Következő megújítás esedékessége"
+        enum status "active/suspended/expired/revoked"
+    }
+
+    %% ─── DOCUMENT (Dokumentum) ───
+    Document {
+        UUID id PK
+        UUID personId FK
+        UUID employmentId FK
+        enum documentCategory "contract/amendment/certificate/id/diploma/medical/other"
+        string documentType "Dokumentum típusa"
+        string fileName "Fájlnév"
+        string storagePath "Tárolási útvonal"
+        date issueDate "Kiállítás dátuma"
+        date expiryDate "Lejárat dátuma"
+        enum gdprCategory "basic/sensitive/special_category/criminal"
+        date retentionUntil "Megőrzés határideje"
+    }
+
+    %% ═══════════════════════════════════════════════════════════════════════════════
+    %% 2. COMPENSATION & TIME – JAVADALMAZÁS, BÉRSZÁMFEJTÉS, MUNKAIDŐ
+    %% ═══════════════════════════════════════════════════════════════════════════════
+
+    %% ─── COMPENSATION (Javadalmazás) ───
+    CompensationType {
+        UUID id PK
+        string code "Típus kódja"
+        string name "Javadalmazási elem neve"
+        enum category "base/supplement/allowance/premium/overtime/benefit/other"
+        boolean isTaxable "Adóköteles-e"
+        boolean isSocialContribBase "Járulékalapot képez-e"
+        enum defaultCalculationMethod "fixed/percentage/hourly/table_lookup/formula"
+    }
+
+    CompensationElement {
+        UUID id PK
+        UUID employmentId FK
+        UUID compensationTypeId FK
+        enum calculationMethod "fixed/percentage/hourly/table_lookup/formula"
+        decimal amount "Összeg (Ft)"
+        decimal percentage "Százalék (%)"
+        date validFrom "Érvényesség kezdete"
+        date validTo "Érvényesség vége"
+        enum status "draft/active/suspended/terminated"
+    }
+
+    BenefitType {
+        UUID id PK
+        string code "Juttatás kódja"
+        string name "Juttatás neve (SZÉP-kártya, cafeteria, stb.)"
+        boolean isTaxFree "Adómentes-e"
+        decimal taxFreeLimit "Adómentes limit (Ft/év)"
+    }
+
+    BenefitEntitlement {
+        UUID id PK
+        UUID employmentId FK
+        UUID benefitTypeId FK
+        decimal annualBudget "Éves keret (Ft)"
+        decimal usedAmount "Felhasznált összeg (számított)"
+        date validFrom "Érvényesség kezdete"
+        date validTo "Érvényesség vége"
+    }
+
+    %% ─── PAYROLL (Bérszámfejtés) ───
+    PayrollRun {
+        UUID id PK
+        UUID organizationId FK
+        integer year "Év"
+        integer month "Hónap"
+        date periodStart "Időszak kezdete"
+        date periodEnd "Időszak vége"
+        enum status "draft/calculated/approved/submitted/paid/closed"
+        date calculatedAt "Számítás időpontja"
+        date submittedToNAV "NAV beküldés időpontja"
+        date paymentDate "Kifizetés dátuma"
+    }
+
+    PayrollItem {
+        UUID id PK
+        UUID payrollRunId FK
+        UUID employmentId FK
+        decimal grossPay "Bruttó bér (Ft)"
+        decimal netPay "Nettó bér (Ft)"
+        decimal employeeTax "Személyi jövedelemadó (Ft)"
+        decimal employeeSocialContrib "Munkavállalói járulék (Ft)"
+        decimal employerSocialContrib "Munkaadói járulék (Ft)"
+        enum status "draft/calculated/approved/paid"
+    }
+
+    WageEntry {
+        UUID id PK
+        UUID payrollItemId FK
+        UUID compensationElementId FK
+        string wageCode "Bértétel kódja (NAV T1041)"
+        string description "Leírás"
+        decimal amount "Összeg (Ft)"
+        boolean isTaxable "Adóköteles-e"
+        boolean isSocialContribBase "Járulékalapot képez-e"
+    }
+
+    %% ─── TIMETRACKING (Munkaidő-nyilvántartás) ───
+    WorkScheduleTemplate {
+        UUID id PK
+        UUID organizationId FK
+        string name "Munkarend neve"
+        enum scheduleType "general/irregular/shift_2/shift_3/continuous/unbound/pedagogical/flextime"
+        decimal dailyHours "Napi óraszám"
+        decimal weeklyHours "Heti óraszám"
+    }
+
+    DailyTimeRecord {
+        UUID id PK
+        UUID employmentId FK
+        UUID shiftAssignmentId FK
+        UUID leaveRecordId FK
+        date date "Dátum"
+        enum dayType "workday/rest_day/public_holiday/transferred_workday/leave"
+        time scheduledStartTime "Tervezett kezdés"
+        time scheduledEndTime "Tervezett befejezés"
+        time actualStartTime "Tényleges kezdés"
+        time actualEndTime "Tényleges befejezés"
+        decimal actualNetHours "Tényleges nettó órák (számított)"
+        decimal regularHours "Rendes munkaidő (számított)"
+        decimal overtimeHours "Túlóra (számított)"
+        decimal nightHours "Éjszakai munka (számított)"
+        enum status "open/draft/submitted/approved/locked"
+    }
+
+    OvertimeRecord {
+        UUID id PK
+        UUID employmentId FK
+        UUID dailyTimeRecordId FK
+        date date "Dátum"
+        enum overtimeType "workday/rest_day/public_holiday/voluntary/frame_excess"
+        decimal hours "Órák száma"
+        enum compensationType "pay/time_off/combined"
+        decimal supplementRate "Pótlék mértéke (számított)"
+    }
+
+    %% ─── LEAVE (Távollét és szabadság) ───
+    LeaveType {
+        UUID id PK
+        string code "Távollét kódja"
+        string name "Távollét megnevezése"
+        enum category "annual/sick/maternity/paternity/parental/unpaid/study/other"
+        boolean isPaid "Fizetett-e"
+        decimal payRate "Fizetés mértéke (%)"
+        boolean deductsFromEntitlement "Levonódik-e a szabadságkeretből"
+    }
+
+    LeaveEntitlement {
+        UUID id PK
+        UUID employmentId FK
+        UUID leaveTypeId FK
+        integer year "Év"
+        decimal baseEntitlement "Alapjogosultság (munkanap)"
+        decimal supplementaryEntitlement "Kiegészítő jogosultság (munkanap)"
+        decimal totalAvailable "Összes elérhető (számított)"
+        decimal used "Felhasznált (számított)"
+        decimal remaining "Fennmaradó (számított)"
+    }
+
+    LeaveRequest {
+        UUID id PK
+        UUID employmentId FK
+        UUID leaveTypeId FK
+        UUID leaveEntitlementId FK
+        date startDate "Kezdő dátum"
+        date endDate "Befejező dátum"
+        decimal workDaysRequested "Igényelt munkanapok száma"
+        boolean isEmployeeInitiated "Munkavállalói kezdeményezés (Mt. 122. § 15 nap)"
+        enum status "draft/submitted/approved/rejected/taken/cancelled"
+    }
+
+    %% ═══════════════════════════════════════════════════════════════════════════════
+    %% 3. TALENT – TOBORZÁS, KÉPZÉS, TELJESÍTMÉNY
+    %% ═══════════════════════════════════════════════════════════════════════════════
+
+    %% ─── RECRUITMENT (Toborzás és munkába állás) ───
+    JobRequisition {
+        UUID id PK
+        UUID organizationId FK
+        UUID positionTemplateId FK
+        string requisitionNumber "Igénylési szám (pl. REQ-2026-001)"
+        enum employmentType "mt/kjt/kit/kttv/puetv/eszjtv/kut"
+        integer numberOfPositions "Álláshely száma"
+        date requestedStartDate "Kért belépési dátum"
+        enum priority "urgent/high/normal/low"
+        enum status "draft/approved/posted/in_progress/filled/cancelled"
+    }
+
+    Candidate {
+        UUID id PK
+        string candidateNumber "Jelölt azonosító"
+        string familyName "Vezetéknév"
+        string givenNames "Utónevek"
+        string email "E-mail cím"
+        string phone "Telefonszám"
+        enum source "job_board/referral/agency/direct_application/linkedin/other"
+        date firstContactDate "Első kapcsolatfelvétel dátuma"
+        enum gdprConsentStatus "pending/granted/refused/withdrawn"
+    }
+
+    Application {
+        UUID id PK
+        UUID candidateId FK
+        UUID jobRequisitionId FK
+        string applicationNumber "Jelentkezés azonosító"
+        date applicationDate "Jelentkezés dátuma"
+        enum status "received/screening/interview/assessment/offer/hired/rejected/withdrawn"
+        enum rejectionReason "qualifications/experience/culture_fit/salary/other"
+    }
+
+    JobOffer {
+        UUID id PK
+        UUID applicationId FK
+        UUID positionId FK
+        string offerNumber "Ajánlat száma"
+        date offerDate "Ajánlat kelte"
+        decimal offeredSalary "Felajánlott alapbér (Ft/hó)"
+        date proposedStartDate "Javasolt belépési dátum"
+        date offerValidUntil "Ajánlat érvényessége"
+        enum status "draft/sent/accepted/rejected/expired/withdrawn"
+    }
+
+    OnboardingPlan {
+        UUID id PK
+        UUID employmentId FK
+        UUID jobOfferId FK
+        date startDate "Munkába állás dátuma"
+        date plannedEndDate "Tervezett befejezés"
+        integer totalTasks "Összes feladat (számított)"
+        integer completedTasks "Befejezett feladatok (számított)"
+        enum status "planned/in_progress/completed/cancelled"
+    }
+
+    %% ─── LEARNING (Képzés és fejlesztés) ───
+    TrainingCatalog {
+        UUID id PK
+        UUID organizationId FK
+        string code "Képzés kódja"
+        string name "Képzés neve"
+        enum trainingCategory "mandatory_compliance/safety/technical/soft_skills/leadership/language/professional"
+        boolean isMandatory "Kötelező-e"
+        string legalBasis "Jogszabályi hivatkozás (pl. Mvt. 54. §)"
+        integer durationHours "Időtartam (óra)"
+        decimal creditPoints "Kreditpontok"
+    }
+
+    TrainingSession {
+        UUID id PK
+        UUID trainingCatalogId FK
+        string sessionCode "Kurzus kódja"
+        date startDate "Kezdő dátum"
+        date endDate "Befejező dátum"
+        enum deliveryMethod "classroom/online/blended/on_the_job"
+        integer maxParticipants "Max létszám"
+        integer enrolledCount "Jelentkezők száma (számított)"
+        enum status "planned/open_for_enrollment/full/in_progress/completed/cancelled"
+    }
+
+    TrainingEnrollment {
+        UUID id PK
+        UUID employmentId FK
+        UUID trainingSessionId FK
+        date enrollmentDate "Jelentkezés dátuma"
+        enum enrollmentType "voluntary/mandatory/manager_assigned"
+        enum status "enrolled/waitlisted/attended/completed/failed/cancelled"
+        decimal finalScore "Végső pontszám"
+    }
+
+    %% ─── PERFORMANCE (Teljesítményértékelés) ───
+    PerformanceReview {
+        UUID id PK
+        UUID employmentId FK
+        UUID reviewerEmploymentId FK
+        integer reviewYear "Értékelés éve"
+        enum reviewPeriod "annual/mid_year/probation/project_based"
+        date reviewDate "Értékelés dátuma"
+        decimal overallRating "Összesített értékelés (1-5)"
+        enum status "planned/self_assessment/manager_review/calibration/approved/acknowledged"
+    }
+
+    Goal {
+        UUID id PK
+        UUID employmentId FK
+        UUID performanceReviewId FK
+        string title "Cél megnevezése"
+        enum goalType "individual/team/organizational"
+        enum category "performance/development/behavioral"
+        date targetDate "Teljesítési határidő"
+        decimal weight "Súly (%)"
+        enum status "draft/active/achieved/not_achieved/cancelled"
+    }
+
+    Competency {
+        UUID id PK
+        UUID organizationId FK
+        UUID positionTemplateId FK
+        string code "Kompetencia kódja"
+        string name "Kompetencia neve"
+        enum category "technical/behavioral/leadership/language"
+        enum requiredLevel "basic/intermediate/advanced/expert"
+        boolean isMandatory "Kötelező-e"
+    }
+
+    %% ═══════════════════════════════════════════════════════════════════════════════
+    %% 4. EMPLOYMENT LIFECYCLE – FEGYELMI, MUNKAVÉDELEM, KILÉPÉS
+    %% ═══════════════════════════════════════════════════════════════════════════════
+
+    %% ─── DISCIPLINARY (Fegyelmi és panaszkezelés) ───
+    DisciplinaryCase {
+        UUID id PK
+        UUID employmentId FK
+        string caseNumber "Ügy száma"
+        date incidentDate "Incidens dátuma"
+        enum caseType "misconduct/policy_violation/performance/attendance/ethics/safety/other"
+        enum severity "minor/moderate/serious/gross"
+        date caseOpenedDate "Ügy indítása"
+        enum status "reported/investigation/hearing/decision/appeal/closed"
+    }
+
+    Investigation {
+        UUID id PK
+        UUID disciplinaryCaseId FK
+        UUID investigatorEmploymentId FK
+        date investigationStartDate "Vizsgálat kezdete"
+        date investigationEndDate "Vizsgálat befejezése"
+        text findings "Megállapítások"
+        enum conclusion "substantiated/unsubstantiated/partially_substantiated/inconclusive"
+    }
+
+    GrievanceCase {
+        UUID id PK
+        UUID employmentId FK
+        string grievanceNumber "Panasz száma"
+        date submissionDate "Benyújtás dátuma"
+        enum grievanceType "working_conditions/harassment/discrimination/compensation/other"
+        text description "Panasz leírása"
+        enum status "submitted/acknowledged/investigation/mediation/decision/appeal/closed"
+    }
+
+    %% ─── OCCUPATIONAL HEALTH (Munkahelyi egészségvédelem) ───
+    OccupationalHealthExam {
+        UUID id PK
+        UUID employmentId FK
+        UUID examTypeId FK
+        date examDate "Vizsgálat dátuma"
+        enum examPurpose "pre_employment/periodic/extraordinary/return_to_work"
+        string examiningPhysician "Vizsgáló orvos neve"
+        enum examResult "fit/fit_with_restrictions/temporarily_unfit/permanently_unfit"
+        date validUntil "Érvényesség vége"
+    }
+
+    WorkAccident {
+        UUID id PK
+        UUID employmentId FK
+        date accidentDate "Baleset időpontja"
+        time accidentTime "Baleset időpontja"
+        UUID siteId FK "Helyszín"
+        enum severity "minor/moderate/serious/fatal"
+        text description "Baleset leírása"
+        integer daysLost "Elveszett munkanapok"
+        boolean navReported "NAV bejelentve"
+        date navReportDate "NAV bejelentés dátuma"
+    }
+
+    %% ─── OFFBOARDING (Kilépési folyamat) ───
+    OffboardingCase {
+        UUID id PK
+        UUID employmentId FK
+        string caseNumber "Kilépési ügy száma"
+        enum terminationType "resignation/termination_by_employer/mutual_agreement/retirement/end_of_fixed_term/death/immediate_dismissal"
+        date noticeDate "Felmondás dátuma"
+        date lastWorkingDay "Utolsó munkanap"
+        integer noticePeriodDays "Felmondási idő (napok)"
+        decimal severancePayMonths "Végkielégítés (hónapok)"
+        enum status "initiated/notice_period/clearance/completed"
+    }
+
+    ExitInterview {
+        UUID id PK
+        UUID offboardingCaseId FK
+        date interviewDate "Interjú dátuma"
+        UUID interviewerEmploymentId FK
+        enum departureReason "career_growth/compensation/work_life_balance/management/relocation/retirement/other"
+        enum wouldRehire "yes/maybe/no"
+        text feedback "Visszajelzés"
+    }
+
+    %% ═══════════════════════════════════════════════════════════════════════════════
+    %% 5. STRATEGIC & COMPLIANCE – UTÓDLÁS, MUNKAERŐ-TERVEZÉS
+    %% ═══════════════════════════════════════════════════════════════════════════════
+
+    %% ─── SUCCESSION PLANNING (Utódlástervezés) ───
+    KeyPosition {
+        UUID id PK
+        UUID positionId FK
+        enum criticalityLevel "critical/high/medium"
+        enum riskLevel "high/medium/low"
+        integer vacancyImpactDays "Betöltetlen napok hatása"
+        date lastReviewDate "Utolsó felülvizsgálat"
+        date nextReviewDue "Következő felülvizsgálat esedékessége"
+    }
+
+    SuccessionPlan {
+        UUID id PK
+        UUID keyPositionId FK
+        UUID currentIncumbentId FK "Jelenlegi betöltő"
+        integer planYear "Tervezés éve"
+        date retirementRiskDate "Nyugdíjazási kockázat dátuma"
+        enum overallReadiness "ready_now/ready_1_2_years/ready_3_plus_years/no_successor"
+        enum status "draft/active/under_review/archived"
+    }
+
+    TalentPool {
+        UUID id PK
+        UUID organizationId FK
+        string name "Tehetségpool neve"
+        enum poolType "high_potential/leadership/technical/succession"
+        text description "Leírás"
+        integer memberCount "Tagok száma (számított)"
+        boolean isActive "Aktív-e"
+    }
+
+    TalentAssessment {
+        UUID id PK
+        UUID employmentId FK
+        integer assessmentYear "Értékelés éve"
+        enum performanceRating "below_expectations/meets_expectations/exceeds_expectations/outstanding"
+        enum potentialRating "limited/moderate/high/top_talent"
+        enum nineBoxCategory "star/high_potential/solid_performer/inconsistent/underperformer/talent_risk/high_professional/core_player/low_contributor"
+        enum retentionRisk "low/medium/high/critical"
+    }
+
+    %% ─── WORKFORCE PLANNING (Munkaerő-tervezés) ───
+    WorkforcePlan {
+        UUID id PK
+        UUID organizationId FK
+        integer planYear "Tervezési év"
+        enum planType "annual/strategic_3y/strategic_5y/scenario"
+        date planStartDate "Terv kezdete"
+        date planEndDate "Terv vége"
+        enum status "draft/approved/active/closed"
+    }
+
+    HeadcountPlan {
+        UUID id PK
+        UUID workforcePlanId FK
+        UUID orgUnitId FK
+        UUID positionTemplateId FK
+        integer quarter "Negyedév"
+        integer baselineHeadcount "Kiinduló létszám"
+        integer targetHeadcount "Cél létszám"
+        integer actualHeadcount "Tényleges létszám"
+        integer variance "Eltérés (számított)"
+    }
+
+    SkillGap {
+        UUID id PK
+        UUID workforcePlanId FK
+        UUID positionTemplateId FK
+        string skillName "Készség neve"
+        integer currentSupply "Jelenlegi kínálat (fő)"
+        integer futureRequirement "Jövőbeli igény (fő)"
+        integer gap "Hiány (számított)"
+        enum gapSeverity "critical/high/medium/low"
+        text mitigationStrategy "Enyhítő stratégia"
+    }
+
+    %% ═══════════════════════════════════════════════════════════════════════════════
+    %% KAPCSOLATOK (RELATIONSHIPS)
+    %% ═══════════════════════════════════════════════════════════════════════════════
+
+    %% ─── PERSON kapcsolatok ───
+    Person ||--o{ Dependent : "eltartottjai"
+    Person ||--o{ BankAccount : "bankszámlái"
+    Person ||--o{ EmergencyContact : "vészhelyzeti kontaktok"
+    Person ||--o{ Employment : "jogviszonyai"
+    Person ||--o{ Qualification : "végzettségei"
+    Person ||--o{ LanguageSkill : "nyelvtudás"
+    Person ||--o{ License : "engedélyei"
+    Person ||--o{ Document : "dokumentumai"
+    Person ||--o{ Candidate : "jelentkezései"
+
+    %% ─── ORGANIZATION kapcsolatok ───
+    Organization ||--o{ OrgUnit : "szervezeti egységei"
+    Organization ||--o{ Site : "telephelyei"
+    Organization ||--o{ Employment : "jogviszonyok"
+    Organization ||--o{ PositionTemplate : "munkakör sablonok"
+    Organization ||--o{ WorkScheduleTemplate : "munkarend sablonok"
+    Organization ||--o{ PayrollRun : "bérfuttatások"
+    Organization ||--o{ JobRequisition : "toborzási igények"
+    Organization ||--o{ TrainingCatalog : "képzési katalógus"
+    Organization ||--o{ Competency : "kompetenciák"
+    Organization ||--o{ TalentPool : "tehetségpoolek"
+    Organization ||--o{ WorkforcePlan : "munkaerő-tervek"
+    Organization o|--o| Organization : "fenntartó-intézmény"
+
+    %% ─── ORGUNIT kapcsolatok ───
+    OrgUnit o|--o| OrgUnit : "szülő-gyerek hierarchia"
+    OrgUnit ||--o{ Position : "álláshelyei"
+    OrgUnit ||--o{ Employment : "beosztott jogviszonyok"
+    OrgUnit ||--o{ HeadcountPlan : "létszámtervek"
+
+    %% ─── POSITION kapcsolatok ───
+    PositionTemplate ||--o{ Position : "példányai"
+    PositionTemplate ||--o{ Competency : "kompetencia követelmények"
+    PositionTemplate ||--o{ JobRequisition : "toborzási igények"
+    PositionTemplate ||--o{ HeadcountPlan : "létszámtervek"
+    PositionTemplate ||--o{ SkillGap : "készséghiányok"
+    Position ||--o{ Employment : "betöltői"
+    Position ||--o{ KeyPosition : "kulcspozíció"
+    Position ||--o{ JobOffer : "állásajánlatok"
+    Position o|--o| Position : "felettes-beosztott"
+    Site ||--o{ Position : "munkavégzési hely"
+    Site ||--o{ WorkAccident : "munkahelyi balesetek"
+
+    %% ─── EMPLOYMENT kapcsolatok (KÖZPONTI HUB) ───
+    Employment ||--o{ EmploymentHistory : "változásai"
+    Employment ||--o{ Document : "dokumentumok"
+    Employment ||--o{ CompensationElement : "javadalmazási elemek"
+    Employment ||--o{ BenefitEntitlement : "juttatási jogosultságok"
+    Employment ||--o{ PayrollItem : "bérszámfejtési tételek"
+    Employment ||--o{ DailyTimeRecord : "napi munkaidő-nyilvántartás"
+    Employment ||--o{ OvertimeRecord : "túlóra nyilvántartás"
+    Employment ||--o{ LeaveEntitlement : "szabadság-jogosultságok"
+    Employment ||--o{ LeaveRequest : "szabadság-igénylések"
+    Employment ||--o{ OnboardingPlan : "onboarding tervek"
+    Employment ||--o{ TrainingEnrollment : "képzések"
+    Employment ||--o{ PerformanceReview : "teljesítményértékelések"
+    Employment ||--o{ Goal : "célok"
+    Employment ||--o{ DisciplinaryCase : "fegyelmi ügyek"
+    Employment ||--o{ GrievanceCase : "panaszok"
+    Employment ||--o{ OccupationalHealthExam : "alkalmassági vizsgálatok"
+    Employment ||--o{ WorkAccident : "munkahelyi balesetek"
+    Employment ||--o{ OffboardingCase : "kilépések"
+    Employment ||--o{ TalentAssessment : "tehetségértékelések"
+    Employment ||--o{ PerformanceReview : "értékelt személy"
+    Employment ||--o{ PerformanceReview : "értékelő (reviewer)"
+    Employment ||--o{ Investigation : "vizsgálatok"
+    Employment ||--o{ ExitInterview : "kilépő interjúk"
+
+    %% ─── COMPENSATION & PAYROLL kapcsolatok ───
+    CompensationElement }o--|| CompensationType : "típusa"
+    BenefitEntitlement }o--|| BenefitType : "típusa"
+    PayrollRun ||--o{ PayrollItem : "bértételek"
+    PayrollItem ||--o{ WageEntry : "bérösszetevők"
+    WageEntry }o--o| CompensationElement : "javadalmazási elem"
+
+    %% ─── LEAVE kapcsolatok ───
+    LeaveEntitlement }o--|| LeaveType : "típusa"
+    LeaveRequest }o--|| LeaveType : "típusa"
+    LeaveRequest }o--o| LeaveEntitlement : "keretből"
+
+    %% ─── RECRUITMENT kapcsolatok ───
+    JobRequisition ||--o{ Application : "jelentkezések"
+    Candidate ||--o{ Application : "jelentkezései"
+    Application ||--o{ JobOffer : "állásajánlatok"
+    JobOffer ||--o{ OnboardingPlan : "onboarding tervek"
+
+    %% ─── LEARNING kapcsolatok ───
+    TrainingCatalog ||--o{ TrainingSession : "kurzusok"
+    TrainingSession ||--o{ TrainingEnrollment : "jelentkezők"
+
+    %% ─── PERFORMANCE kapcsolatok ───
+    PerformanceReview ||--o{ Goal : "célok"
+
+    %% ─── DISCIPLINARY kapcsolatok ───
+    DisciplinaryCase ||--o{ Investigation : "vizsgálatok"
+
+    %% ─── OFFBOARDING kapcsolatok ───
+    OffboardingCase ||--o{ ExitInterview : "kilépő interjúk"
+
+    %% ─── SUCCESSION PLANNING kapcsolatok ───
+    KeyPosition }o--|| Position : "pozíció"
+    SuccessionPlan }o--|| KeyPosition : "kulcspozíció"
+    SuccessionPlan }o--o| Employment : "jelenlegi betöltő"
+    TalentPool ||--o{ TalentAssessment : "tagok értékelései (indirekt)"
+
+    %% ─── WORKFORCE PLANNING kapcsolatok ───
+    WorkforcePlan ||--o{ HeadcountPlan : "létszámtervek"
+    WorkforcePlan ||--o{ SkillGap : "készséghiányok"
